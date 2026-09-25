@@ -28,6 +28,8 @@
 #include "cbase.h"
 #include "soundent.h"
 
+#include "globals.h"
+
 DLL_GLOBAL ULONG		g_ulFrameCount;
 DLL_GLOBAL ULONG		g_ulModelIndexEyes;
 DLL_GLOBAL ULONG		g_ulModelIndexPlayer;
@@ -37,3 +39,6 @@ DLL_GLOBAL int			gDisplayTitle;
 DLL_GLOBAL BOOL			g_fGameOver;
 DLL_GLOBAL const Vector	g_vecZero = Vector(0,0,0);
 DLL_GLOBAL int			g_Language;
+
+FrozenInfo g_frozen[MAX_FROZEN];
+int g_numFrozen;

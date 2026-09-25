@@ -43,6 +43,23 @@ char *szPowerupModels[NUM_POWERUPS] =
 };
 
 LINK_ENTITY_TO_CLASS( item_powerup, CDiscwarPowerup );
+LINK_ENTITY_TO_CLASS( item_powerup_triple, CDiscwarPowerup );
+LINK_ENTITY_TO_CLASS( item_powerup_fast, CDiscwarPowerup );
+LINK_ENTITY_TO_CLASS( item_powerup_hard, CDiscwarPowerup );
+LINK_ENTITY_TO_CLASS( item_powerup_freeze, CDiscwarPowerup );
+
+int GetPowerupIndex(string_t classname) {
+	if(FStrEq(STRING(classname), "item_powerup_triple"))
+		return 0;
+	if(FStrEq(STRING(classname), "item_powerup_fast"))
+		return 1;
+	if(FStrEq(STRING(classname), "item_powerup_hard"))
+		return 2;
+	if(FStrEq(STRING(classname), "item_powerup_freeze"))
+		return 3;
+
+	return RANDOM_LONG(0, NUM_POWERUPS - 1);
+}
 
 //=========================================================
 void CDiscwarPowerup::Spawn( void )
@@ -56,8 +73,13 @@ void CDiscwarPowerup::Spawn( void )
 	UTIL_SetSize(pev, Vector(-32, -32, -32), Vector(32, 32, 32));
 
 	// Use first model for now
-	SET_MODEL(ENT(pev), szPowerupModels[0]);
+	SET_MODEL(ENT(pev), szPowerupModels[GetPowerupIndex(pev->classname)]);
 	pev->effects |= EF_NODRAW;
+
+	if(!InArenaMode()) {
+		// Make the powerup start thinking
+		Enable();
+	}
 }
 
 void CDiscwarPowerup::Activate( void )
@@ -80,11 +102,6 @@ void CDiscwarPowerup::Activate( void )
 				pPowerup->pev->groupinfo = g_pArenaList[i]->pev->groupinfo;
 			}
 		}
-	}
-	else
-	{
-		// Make the powerup start thinking
-		Enable();
 	}
 }
 
@@ -110,7 +127,9 @@ void CDiscwarPowerup::PowerupTouch( CBaseEntity *pOther )
 	CBasePlayer *pPlayer = (CBasePlayer *)pOther;
 
 	// Give the powerup to the player
-	pPlayer->GivePowerup( m_iPowerupType );
+	if(!pPlayer->GivePowerup(m_iPowerupType))
+		return;
+
 	m_hPlayerIGaveTo = pPlayer;
 	SetTouch( NULL );
 	pev->effects |= EF_NODRAW;
@@ -120,7 +139,10 @@ void CDiscwarPowerup::PowerupTouch( CBaseEntity *pOther )
 	pev->nextthink = gpGlobals->time + DISC_POWERUP_RESPAWN_TIME;
 
 	// Play the powerup sound
-	EMIT_SOUND_DYN( pOther->edict(), CHAN_STATIC, "powerup.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
+	EMIT_SOUND_DYN( pOther->edict(), CHAN_STATIC, "powerup.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3));
+
+	if(g_pGameRules->ItemShouldRespawn((CItem*)this) != GR_ITEM_RESPAWN_YES)
+		UTIL_Remove(this);
 }
 
 // Disappear and don't appear again until enabled
@@ -136,15 +158,14 @@ void CDiscwarPowerup::Disable()
 void CDiscwarPowerup::Enable()
 {
 	// Pick a powerup 
-	SetThink( &CDiscwarPowerup::ChoosePowerupThink );
-	pev->nextthink = gpGlobals->time + (DISC_POWERUP_RESPAWN_TIME / 2);
+	ChoosePowerupThink();
 }
 
 //=========================================================
 // Randomly decide what powerup to be
 void CDiscwarPowerup::ChoosePowerupThink( void )
 {
-	int iPowerup = RANDOM_LONG(0, NUM_POWERUPS-1);
+	int iPowerup = GetPowerupIndex(pev->classname);
 	m_iPowerupType = (1 << iPowerup);
 
 	SET_MODEL( ENT(pev), szPowerupModels[iPowerup] );
@@ -189,8 +210,11 @@ void CDiscwarPowerup::RemovePowerupThink( void )
 //=================================================================================
 // PLAYER HANDLING FOR POWERUPS
 //=========================================================
-void CBasePlayer::GivePowerup( int iPowerupType )
+bool CBasePlayer::GivePowerup( int iPowerupType )
 {
+	if((m_iPowerups & iPowerupType) && m_iPowerupDiscs == MAX_DISCS)
+		return false;
+
 	m_iPowerups |= iPowerupType;
 
 	if ( m_iPowerups & POW_HARD )
@@ -201,6 +225,7 @@ void CBasePlayer::GivePowerup( int iPowerupType )
 	MESSAGE_END();
 
 	m_iPowerupDiscs = MAX_DISCS;
+	return true;
 }
 
 void CBasePlayer::RemovePowerup( int iPowerupType )

@@ -60,10 +60,7 @@ int InArenaMode()
 	if ( g_iMapTurnedOffArena )
 		return FALSE;
 
-	if ( gpGlobals->maxClients == 1 || (CVAR_GET_FLOAT("rc_arena") == 0) )
-		return FALSE;
-
-	return TRUE;
+	return CVAR_GET_FLOAT("rc_arena") != 0;
 }
 
 LINK_ENTITY_TO_CLASS( disc_arena, CDiscArena );

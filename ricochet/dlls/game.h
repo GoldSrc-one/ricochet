@@ -22,6 +22,7 @@ extern void GameDLLShutdown( void );
 extern cvar_t	displaysoundlist;
 
 // multiplayer server rules
+extern cvar_t	teamplay;
 extern cvar_t	fraglimit;
 extern cvar_t	timelimit;
 extern cvar_t	friendlyfir;

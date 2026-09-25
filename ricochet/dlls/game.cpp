@@ -29,7 +29,7 @@ cvar_t  allow_spectators = { "allow_spectators", "1.0", FCVAR_SERVER };		// 0 pr
 // discwar
 cvar_t	rc_rounds			= {"rc_rounds", "3",  FCVAR_SERVER | FCVAR_UNLOGGED };
 cvar_t	rc_playersperteam	= {"rc_playersperteam", "1",  FCVAR_SERVER | FCVAR_UNLOGGED };
-cvar_t	rc_arena			= {"rc_arena", "1",  FCVAR_SERVER | FCVAR_UNLOGGED };
+cvar_t	rc_arena			= {"rc_arena", "0",  FCVAR_SERVER | FCVAR_UNLOGGED };
 
 // multiplayer server rules
 cvar_t	teamplay	= {"mp_teamplay","0", FCVAR_SERVER };
@@ -42,7 +42,7 @@ cvar_t	forcerespawn= {"mp_forcerespawn","1", FCVAR_SERVER };
 cvar_t	flashlight	= {"mp_flashlight","0", FCVAR_SERVER };
 cvar_t	aimcrosshair= {"mp_autocrosshair","1", FCVAR_SERVER };
 cvar_t	decalfrequency = {"decalfrequency","30", FCVAR_SERVER };
-cvar_t	teamlist = {"mp_teamlist","male", FCVAR_SERVER };
+cvar_t	teamlist = {"mp_teamlist","male2", FCVAR_SERVER };
 cvar_t	teamoverride = {"mp_teamoverride","1" };
 cvar_t	defaultteam = {"mp_defaultteam","0" };
 cvar_t	allowmonsters={"mp_allowmonsters","0", FCVAR_SERVER };

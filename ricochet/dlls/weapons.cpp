@@ -312,6 +312,11 @@ void W_Precache(void)
 	// Discwar
 	UTIL_PrecacheOtherWeapon( "weapon_disc" );
 	UTIL_PrecacheOther( "disc" );
+
+	UTIL_PrecacheOther("item_powerup_triple");
+	UTIL_PrecacheOther("item_powerup_fast");
+	UTIL_PrecacheOther("item_powerup_hard");
+	UTIL_PrecacheOther("item_powerup_freeze");
 }
 
 

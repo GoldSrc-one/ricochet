@@ -32,6 +32,7 @@
 #include "discwar.h"
 #include "disc_arena.h"
 #include "disc_objects.h"
+#include "game.h"
 
 #define	SF_TRIGGER_PUSH_START_OFF	2//spawnflag that makes trigger_push spawn turned OFF
 #define SF_TRIGGER_HURT_TARGETONCE	1// Only fire hurt target once
@@ -2500,7 +2501,7 @@ void CDiscTarget::DiscToggleTouch( CBaseEntity *pOther )
 	CBaseEntity *pOwner = (CBaseEntity *)((CDisc *)pOther)->m_hOwner;
 
 	// Hit by friendly if the teams match. Enemy otherwise
-	if ( pOwner && pOwner->pev->team == pev->team )
+	if ( pOwner && pOwner->pev->team == pev->team && g_pGameRules->IsTeamplay())
 	{
 		Reset();
 		iHitBy = LAST_HITBY_FRIENDLY;

@@ -39,6 +39,7 @@
 #include "netadr.h"
 #include "game.h"
 #include "disc_objects.h"
+#include "globals.h"
 
 #if !defined ( _WIN32 )
 #include <ctype.h>
@@ -48,11 +49,6 @@ edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer );
 
 #include "discwar.h"
 #include "disc_arena.h"
-
-extern DLL_GLOBAL ULONG		g_ulModelIndexPlayer;
-extern DLL_GLOBAL BOOL		g_fGameOver;
-extern DLL_GLOBAL int		g_iSkillLevel;
-extern DLL_GLOBAL ULONG		g_ulFrameCount;
 
 extern void CopyToBodyQue(entvars_t* pev);
 extern int giPrecacheGrunt;
@@ -105,7 +101,7 @@ void LinkUserMessages( void );
  */
 void set_suicide_frame(entvars_t* pev)
 {       
-	if ( !FStrEq(STRING(pev->model), "models/player/female/female.mdl") && !FStrEq(STRING(pev->model), "models/player/male/male.mdl") )
+	if (!(strncmp(STRING(pev->model), "models/player/", strlen("models/player/")) == 0))
 		return; // allready gibbed
 
 //	pev->frame		= $deatha11;
@@ -218,7 +214,7 @@ void ClientKill( edict_t *pEntity )
 	entvars_t *pev = &pEntity->v;
 
 	// Don't allow the suicide command
-	return;
+	//return;
 
 	CBasePlayer *pl = (CBasePlayer*) CBasePlayer::Instance( pev );
 
@@ -268,7 +264,7 @@ void ClientPutInServer( edict_t *pEntity )
 	{
 		AddClientToArena( pPlayer );
 	}
-	else
+	/*else
 	{
 		// Put everyone on different teams
 		pPlayer->pev->team = ENTINDEX( pEntity );
@@ -278,7 +274,7 @@ void ClientPutInServer( edict_t *pEntity )
 		int iHue = GetHueFromRGB( g_iaDiscColors[ pPlayer->pev->team][0] / 255, g_iaDiscColors[pPlayer->pev->team][1] / 255, g_iaDiscColors[pPlayer->pev->team][2] / 255 );
 		g_engfuncs.pfnSetClientKeyValue( ENTINDEX( pEntity ), g_engfuncs.pfnGetInfoKeyBuffer( pPlayer->edict() ), "topcolor", UTIL_VarArgs("%d", iHue) );
 		g_engfuncs.pfnSetClientKeyValue( ENTINDEX( pEntity ), g_engfuncs.pfnGetInfoKeyBuffer( pPlayer->edict() ), "bottomcolor", UTIL_VarArgs("%d", iHue - 10) );
-	}
+	}*/
 
 	static char sName[128];
 	strcpy(sName,STRING(pPlayer->pev->netname));
@@ -591,14 +587,14 @@ void ClientUserInfoChanged( edict_t *pEntity, char *infobuffer )
 	g_pGameRules->ClientUserInfoChanged( GetClassPtr((CBasePlayer *)&pEntity->v), infobuffer );
 
 	// Override model
-	if ( (!strcmp( "models/player/female/female.mdl", g_engfuncs.pfnInfoKeyValue( infobuffer, "model" ) )) )//&& (!strcmp( "models/player/hgrunt/hgrunt.mdl" )) )
-		SET_MODEL( pEntity, "models/player/male/male.mdl" );
-	g_engfuncs.pfnSetClientKeyValue( ENTINDEX( pEntity ), infobuffer, "model", "male" );
+	/*if ( (!strcmp( "models/player/female/female.mdl", g_engfuncs.pfnInfoKeyValue( infobuffer, "model" ) )) )//&& (!strcmp( "models/player/hgrunt/hgrunt.mdl" )) )
+		SET_MODEL( pEntity, "models/player/male/male.mdl" );*/
+	//g_engfuncs.pfnSetClientKeyValue( ENTINDEX( pEntity ), infobuffer, "model", "male2" );
 
 	// Set colors
-	int iHue = GetHueFromRGB( g_iaDiscColors[ pEntity->v.team][0] / 255, g_iaDiscColors[pEntity->v.team][1] / 255, g_iaDiscColors[pEntity->v.team][2] / 255 );
+	/*int iHue = GetHueFromRGB( g_iaDiscColors[ pEntity->v.team][0] / 255, g_iaDiscColors[pEntity->v.team][1] / 255, g_iaDiscColors[pEntity->v.team][2] / 255 );
 	g_engfuncs.pfnSetClientKeyValue( ENTINDEX( pEntity ), infobuffer, "topcolor", UTIL_VarArgs("%d", iHue) );
-	g_engfuncs.pfnSetClientKeyValue( ENTINDEX( pEntity ), infobuffer, "bottomcolor", UTIL_VarArgs("%d", iHue - 10) );
+	g_engfuncs.pfnSetClientKeyValue( ENTINDEX( pEntity ), infobuffer, "bottomcolor", UTIL_VarArgs("%d", iHue - 10) );*/
 }
 
 static int g_serveractive = 0;
@@ -656,6 +652,9 @@ void ServerActivate( edict_t *pEdictList, int edictCount, int clientMax )
 
 	// Reset Arena Count
 	g_iNextArenaGroupInfo = 0;
+
+	memset(g_frozen, 0, sizeof(g_frozen));
+	g_numFrozen = 0;
 }
 
 
@@ -722,6 +721,30 @@ void StartFrame( void )
 	gpGlobals->teamplay = CVAR_GET_FLOAT("teamplay");
 	g_iSkillLevel = CVAR_GET_FLOAT("skill");
 	g_ulFrameCount++;
+
+	for(int iFrozen = 0; iFrozen < g_numFrozen; iFrozen++) {
+		auto pFrozen = &g_frozen[iFrozen];
+		if(!pFrozen->time) {
+			continue;
+		}
+
+		if(pFrozen->time > gpGlobals->time)
+			continue;
+
+		auto pFrozenEntity = (CBaseEntity*)pFrozen->entity;
+		if(pFrozenEntity) {
+			if(pFrozenEntity->IsPlayer())
+				g_engfuncs.pfnSetClientMaxspeed(pFrozenEntity->edict(), pFrozen->maxspeed);
+			else
+				pFrozenEntity->pev->maxspeed = pFrozen->maxspeed;
+
+			pFrozenEntity->pev->renderfx = pFrozen->renderfx;
+			pFrozenEntity->pev->rendercolor = pFrozen->rendercolor;
+			pFrozenEntity->pev->renderamt = pFrozen->renderamt;
+		}
+
+		memset(pFrozen, 0, sizeof(*pFrozen));
+	}
 }
 
 
@@ -817,7 +840,7 @@ void ClientPrecache( void )
 	PRECACHE_SOUND("player/pl_pain7.wav");
 
 	//PRECACHE_MODEL("models/player/female/female.mdl");
-	PRECACHE_MODEL("models/player/male/male.mdl");
+	PRECACHE_MODEL("models/player/male2/male2.mdl");
 
 	// hud sounds
 
@@ -1804,7 +1827,7 @@ int ShouldCollide( edict_t *pentTouched, edict_t *pentOther )
 	if ( pentTouched->v.iuser4 != 0 && pentOther->v.iuser4 != 0 )
 	{
 		// Two friendly discs will have matching iuser4's
-		if ( pentTouched->v.iuser4 == pentOther->v.iuser4 )
+		if ( pentTouched->v.iuser4 == pentOther->v.iuser4 && g_pGameRules->IsTeamplay())
 		{
 			return 0;
 		}

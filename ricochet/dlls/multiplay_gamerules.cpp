@@ -79,7 +79,7 @@ CHalfLifeMultiplay :: CHalfLifeMultiplay()
 	
 	RefreshSkillData();
 	m_flIntermissionEndTime = 0;
-	
+
 	// 11/8/98
 	// Modified by YWB:  Server .cfg file is now a cvar, so that 
 	//  server ops can run multiple game servers, with different server .cfg files,

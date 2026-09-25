@@ -287,7 +287,7 @@ public:
 	int GetCustomDecalFrames( void );
 
 	// Discwar
-	void GivePowerup( int iPowerupType );
+	bool GivePowerup( int iPowerupType );
 	void RemovePowerup( int iPowerupType );
 	void RemoveAllPowerups( void );
 	bool HasPowerup( int iPowerupType );

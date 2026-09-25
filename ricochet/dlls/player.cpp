@@ -201,6 +201,9 @@ int gmsgPowerup = 0;
 int gmsgReward = 0;
 int gmsgFrozen = 0;
 
+int gmsgStatusText = 0;
+int gmsgStatusValue = 0;
+
 void LinkUserMessages( void )
 {
 	// Already taken care of?
@@ -249,6 +252,9 @@ void LinkUserMessages( void )
 	gmsgPowerup = REG_USER_MSG( "Powerup", 1 );
 	gmsgReward = REG_USER_MSG( "Reward", 2 );
 	gmsgFrozen = REG_USER_MSG( "Frozen", 1 );
+
+	gmsgStatusText = REG_USER_MSG("StatusText", -1);
+	gmsgStatusValue = REG_USER_MSG("StatusValue", 3);
 }
 
 LINK_ENTITY_TO_CLASS( player, CBasePlayer );
@@ -386,30 +392,8 @@ void CBasePlayer :: TraceAttack( entvars_t *pevAttacker, float flDamage, Vector 
 	{
 		m_LastHitGroup = ptr->iHitgroup;
 
-		switch ( ptr->iHitgroup )
-		{
-		case HITGROUP_GENERIC:
-			break;
-		case HITGROUP_HEAD:
-			flDamage *= gSkillData.plrHead;
-			break;
-		case HITGROUP_CHEST:
-			flDamage *= gSkillData.plrChest;
-			break;
-		case HITGROUP_STOMACH:
-			flDamage *= gSkillData.plrStomach;
-			break;
-		case HITGROUP_LEFTARM:
-		case HITGROUP_RIGHTARM:
-			flDamage *= gSkillData.plrArm;
-			break;
-		case HITGROUP_LEFTLEG:
-		case HITGROUP_RIGHTLEG:
-			flDamage *= gSkillData.plrLeg;
-			break;
-		default:
-			break;
-		}
+		if(ptr->iHitgroup == HITGROUP_HEAD)
+			flDamage *= 3;
 
 		SpawnBlood(ptr->vecEndPos, BloodColor(), flDamage);// a little surface blood.
 		TraceBleed( flDamage, vecDir, ptr, bitsDamageType );
@@ -435,6 +419,14 @@ int CBasePlayer :: TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, 
 
 	if (pev->takedamage == DAMAGE_NO)
 		return 0;
+
+	CBaseEntity* pAttacker = CBaseEntity::Instance(pevAttacker);
+	if(!g_pGameRules->FPlayerCanTakeDamage(this, pAttacker)) {
+		// Refuse the damage
+		return 0;
+	}
+
+	//return CBaseMonster::TakeDamage(pevInflictor, pevAttacker, flDamage, bitsDamageType);
 
 	// Discwar instantly kills everyone when they take damage
 	pev->health = -1;
@@ -735,7 +727,6 @@ void CBasePlayer::SetAnimation( PLAYER_ANIM playerAnim )
 	// Decide which sequence to play based upon the activity
 	switch (m_IdealActivity)
 	{
-	case ACT_DIEFORWARD:
 	case ACT_FALL:
 	default:
 		if ( m_Activity == m_IdealActivity)
@@ -781,6 +772,7 @@ void CBasePlayer::SetAnimation( PLAYER_ANIM playerAnim )
 		}
 		break;
 
+	case ACT_DIEFORWARD:
 	case ACT_DIE_HEADSHOT:
 		animDesired = LookupSequence( "die_simple" );
 		m_Activity = m_IdealActivity;
@@ -927,6 +919,9 @@ void CBasePlayer::SetAnimation( PLAYER_ANIM playerAnim )
 	{
 		pev->gaitsequence	= LookupSequence( "base_stand" );
 	}
+
+	if(pev->flags & FL_DUCKING)
+		pev->gaitsequence = LookupSequence(speed > 0 ? "crouchrun" : "crouch_idle");
 
 	// Already using the desired animation?
 	if (pev->sequence == animDesired)
@@ -2938,7 +2933,7 @@ void CBasePlayer::Spawn( void )
 	m_flTouchedByJumpPad = 0;
 	m_flNextAttack		= gpGlobals->time + 0.5;	// Prevent fire
 
-	g_engfuncs.pfnSetPhysicsKeyValue( edict(), "slj", "0" );
+	g_engfuncs.pfnSetPhysicsKeyValue( edict(), "slj", "1" );
 	g_engfuncs.pfnSetPhysicsKeyValue( edict(), "hl", "1" );
 
 	m_iFOV				= 0;// init field of view.
@@ -2965,7 +2960,7 @@ void CBasePlayer::Spawn( void )
 
 	g_pGameRules->GetPlayerSpawnSpot( this );
 
-    SET_MODEL(ENT(pev), "models/player/male/male.mdl");
+    SET_MODEL(ENT(pev), "models/player/male2/male2.mdl");
     g_ulModelIndexPlayer = pev->modelindex;
 	pev->sequence		= LookupActivity( ACT_IDLE );
 
@@ -2997,6 +2992,8 @@ void CBasePlayer::Spawn( void )
 		m_rgAmmo[i] = 0;
 		m_rgAmmoLast[i] = 0;  // client ammo values also have to be reset  (the death hud clear messages does on the client side)
 	}
+
+	RemoveAllPowerups();
 
 	m_lastx = m_lasty = 0;
 
@@ -3046,8 +3043,8 @@ void CBasePlayer :: Precache( void )
 
 	m_iUpdateTime = 5;  // won't update for 1/2 a second
 
-	if ( gInitHUD )
-		m_fInitHUD = TRUE;
+	//if ( gInitHUD )
+	m_fInitHUD = TRUE;
 }
 
 
@@ -4052,6 +4049,15 @@ void CBasePlayer :: UpdateClientData( void )
 		m_iClientHealth = pev->health;
 	}
 
+	/*MESSAGE_BEGIN(MSG_ONE, gmsgStatusText, NULL, pev);
+	WRITE_BYTE(0);
+	WRITE_STRING("%i1");
+	MESSAGE_END();
+
+	MESSAGE_BEGIN(MSG_ONE, gmsgStatusValue, NULL, pev);
+	WRITE_BYTE(1);
+	WRITE_SHORT(pev->health);
+	MESSAGE_END();*/
 
 	if (pev->armorvalue != m_iClientBattery)
 	{
@@ -4858,7 +4864,7 @@ void CBasePlayer::Freeze( void )
 	pev->rendercolor.z = 200;
 	pev->renderamt = 25;
 
-	pev->maxspeed = FREEZE_SPEED;
+	g_engfuncs.pfnSetClientMaxspeed(edict(), FREEZE_SPEED);
 	m_iFrozen = 1;
 
 	m_flFreezeTime = gpGlobals->time + FREEZE_TIME;

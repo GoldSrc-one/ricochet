@@ -27,6 +27,8 @@
 #include "discwar.h"
 #include "disc_objects.h"
 #include "disc_arena.h"
+#include "gamerules.h"
+#include "globals.h"
  
 // Disc trail colors
 float g_iaDiscColors[33][3] =
@@ -93,7 +95,7 @@ void CDisc::Spawn( void )
 
 	pev->classname = MAKE_STRING("disc");
 	pev->movetype = MOVETYPE_BOUNCEMISSILE;
-	pev->solid = SOLID_TRIGGER;
+	pev->solid = SOLID_SLIDEBOX;
 
 	// Setup model
 	if ( m_iPowerupFlags & POW_HARD )
@@ -205,8 +207,15 @@ void CDisc::ReturnToThrower( void )
 
 void CDisc::DiscTouch ( CBaseEntity *pOther )
 {
-	// Push players backwards
-	if ( pOther->IsPlayer() )
+	// Push what can be pushed
+	if (pOther->pev->movetype == MOVETYPE_WALK ||
+		pOther->pev->movetype == MOVETYPE_STEP ||
+		pOther->pev->movetype == MOVETYPE_FLY ||
+		pOther->pev->movetype == MOVETYPE_TOSS ||
+		pOther->pev->movetype == MOVETYPE_FLYMISSILE ||
+		pOther->pev->movetype == MOVETYPE_BOUNCE ||
+		pOther->pev->movetype == MOVETYPE_BOUNCEMISSILE ||
+		pOther->pev->movetype == MOVETYPE_PUSHSTEP)
 	{
 		if ( ((CBaseEntity*)m_hOwner) == pOther )
 		{
@@ -222,34 +231,83 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 		}
 		else if ( m_fDontTouchEnemies < gpGlobals->time)
 		{
-			if ( pev->team != pOther->pev->team )
+			if ( pev->team != pOther->pev->team || !g_pGameRules->IsTeamplay())
 			{
-				((CBasePlayer*)pOther)->m_LastHitGroup = HITGROUP_GENERIC;
+				m_fDontTouchEnemies = gpGlobals->time + 0.1;
+
+				//bool otherIsPlayer = pOther->IsPlayer();
+				bool otherIsRicochetPlayer = pOther->pev->modelindex == g_ulModelIndexPlayer && pOther->IsPlayer();
+				if(otherIsRicochetPlayer)
+					((CBasePlayer*)pOther)->m_LastHitGroup = HITGROUP_GENERIC;
 
 				// Do freeze seperately so you can freeze and shatter a person with a single shot
-				if ( m_iPowerupFlags & POW_FREEZE && ((CBasePlayer*)pOther)->m_iFrozen == FALSE )
+
+				//TODO: make freezing of non ricochet players possible too!
+				if (m_iPowerupFlags & POW_FREEZE && ((CBasePlayer*)pOther)->m_iFrozen == FALSE )
 				{
 					// Freeze the player and make them glow blue
-					EMIT_SOUND_DYN( pOther->edict(), CHAN_WEAPON, "weapons/electro5.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
-					((CBasePlayer*)pOther)->Freeze();
+					EMIT_SOUND_DYN( pOther->edict(), CHAN_WEAPON, "weapons/electro5.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3));
+					
+					if(otherIsRicochetPlayer) {
+						((CBasePlayer*)pOther)->Freeze();
+					}
+					else {
+						for(int iFrozen = 0; iFrozen < MAX_FROZEN; iFrozen++) {
+							auto pFrozen = &g_frozen[iFrozen];
+							if(pFrozen->time)
+								continue;
+
+							pFrozen->entity = pOther;
+							pFrozen->time = gpGlobals->time + FREEZE_TIME;
+
+							pFrozen->maxspeed = pOther->pev->maxspeed;
+							pFrozen->nextthink = pOther->pev->nextthink;
+							pFrozen->renderfx = pOther->pev->renderfx;
+							pFrozen->rendercolor = pOther->pev->rendercolor;
+							pFrozen->renderamt = pOther->pev->renderamt;
+
+							if(pOther->IsPlayer()) {
+								g_engfuncs.pfnSetClientMaxspeed(pOther->edict(), FREEZE_SPEED);
+							}
+							else {
+								pOther->pev->maxspeed = FREEZE_SPEED;
+							}
+							pOther->pev->velocity.x = 0;
+							pOther->pev->velocity.y = 0;
+							pOther->pev->nextthink = gpGlobals->time + FREEZE_TIME + 0.1;
+
+							pOther->pev->renderfx = kRenderFxGlowShell;
+							pOther->pev->rendercolor.z = 200;
+							pOther->pev->renderamt = 25;
+
+							if(iFrozen >= g_numFrozen)
+								g_numFrozen = iFrozen + 1;
+
+							break;
+						}
+					}
 
 					// If it's not a decap, return now. If it's a decap, continue to shatter
 					if ( !m_bDecapitate )
 					{
-						m_fDontTouchEnemies = gpGlobals->time + 2.0;
 						return;
 					}
 				}
 
 				// Decap or push
-				if (m_bDecapitate)
+				if (m_bDecapitate && pOther->pev->takedamage)
 				{
 					// Decapitate!
-					if ( m_bTeleported )
+					if ( m_bTeleported && otherIsRicochetPlayer)
 						((CBasePlayer*)pOther)->m_flLastDiscHitTeleport = gpGlobals->time;
-					((CBasePlayer*)pOther)->Decapitate( ((CBaseEntity*)m_hOwner)->pev );
 
-					m_fDontTouchEnemies = gpGlobals->time + 0.5;
+					if(otherIsRicochetPlayer) {
+						((CBasePlayer*)pOther)->Decapitate(((CBaseEntity*)m_hOwner)->pev);
+					}
+					else {
+						EMIT_SOUND(ENT(pev), CHAN_AUTO, "decap.wav", 1, ATTN_NORM);
+						pOther->TakeDamage(pev, ((CBaseEntity*)m_hOwner)->pev, 500, GIB_ALWAYS);
+					}
 				}
 				else 
 				{
@@ -270,23 +328,27 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 					// Push the player
 					Vector vecDir = pev->velocity.Normalize();
 					pOther->pev->flags &= ~FL_ONGROUND;
-					((CBasePlayer*)pOther)->m_vecHitVelocity = vecDir * DISC_PUSH_MULTIPLIER;
+
+					if(otherIsRicochetPlayer)
+						((CBasePlayer*)pOther)->m_vecHitVelocity = vecDir * DISC_PUSH_MULTIPLIER;
+					else
+						pOther->pev->velocity = pOther->pev->velocity + vecDir * DISC_PUSH_MULTIPLIER;
 
 					// Shield flash only if the player isnt frozen
-					if ( ((CBasePlayer*)pOther)->m_iFrozen == false )
+					if (otherIsRicochetPlayer && ((CBasePlayer*)pOther)->m_iFrozen == false )
 					{
 						pOther->pev->renderfx = kRenderFxGlowShell;
 						pOther->pev->rendercolor.x = 255;
 						pOther->pev->renderamt = 150;
 					}
 
-					((CBasePlayer*)pOther)->m_hLastPlayerToHitMe = m_hOwner;
-					((CBasePlayer*)pOther)->m_flLastDiscHit = gpGlobals->time;
-					((CBasePlayer*)pOther)->m_iLastDiscBounces = m_iBounces;
-					if ( m_bTeleported )
-						((CBasePlayer*)pOther)->m_flLastDiscHitTeleport = gpGlobals->time;
-
-					m_fDontTouchEnemies = gpGlobals->time + 2.0;
+					if(otherIsRicochetPlayer) {
+						((CBasePlayer*)pOther)->m_hLastPlayerToHitMe = m_hOwner;
+						((CBasePlayer*)pOther)->m_flLastDiscHit = gpGlobals->time;
+						((CBasePlayer*)pOther)->m_iLastDiscBounces = m_iBounces;
+						if(m_bTeleported)
+							((CBasePlayer*)pOther)->m_flLastDiscHitTeleport = gpGlobals->time;
+					}
 				}
 			}
 		}
@@ -295,7 +357,7 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 	else if ( pOther->pev->iuser4 ) 
 	{
 		// Enemy Discs destroy each other
-		if ( pOther->pev->iuser4 != pev->iuser4 )
+		if ( pOther->pev->iuser4 != pev->iuser4 || !g_pGameRules->IsTeamplay())
 		{
 			// Play a warp sound and sprite
 			CSprite *pSprite = CSprite::SpriteCreate( "sprites/discreturn.spr", pev->origin, TRUE );
@@ -535,9 +597,10 @@ CDisc *CDiscWeapon::FireDisc( bool bDecapitator )
 
 #if !defined( CLIENT_DLL )
 	Vector vecFireDir = g_vecZero;
+	vecFireDir[0] = m_pPlayer->pev->v_angle[0];
 	vecFireDir[1] = m_pPlayer->pev->v_angle[1];
 	UTIL_MakeVectors( vecFireDir );
-	Vector vecSrc = m_pPlayer->pev->origin + (m_pPlayer->pev->view_ofs * 0.25) + gpGlobals->v_forward * 16;
+	Vector vecSrc = m_pPlayer->pev->origin + m_pPlayer->pev->view_ofs + gpGlobals->v_forward * 16;
 	CDisc *pDisc = CDisc::CreateDisc( vecSrc, vecFireDir, m_pPlayer, this, bDecapitator, m_pPlayer->m_iPowerups );
 	pReturnDisc = pDisc;
 

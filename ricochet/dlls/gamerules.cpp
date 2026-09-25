@@ -24,6 +24,7 @@
 #include	"gamerules.h"
 #include	"teamplay_gamerules.h"
 #include	"skill.h"
+#include	"game.h"
 
 extern edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer );
 
@@ -320,7 +321,7 @@ CGameRules *InstallGameRules( void )
 		// Discwar's always in teamplay mode.
 		//CVAR_SET_FLOAT( "mp_teamplay", 1 );
 		//return new CHalfLifeTeamplay;
-		return new CHalfLifeMultiplay;
+		return teamplay.value ? new CHalfLifeTeamplay : new CHalfLifeMultiplay;
 	}
 }
 
