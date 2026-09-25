@@ -90,7 +90,7 @@ Collects multiple small damages into a single damage
 //
 // ClearMultiDamage - resets the global multi damage accumulator
 //
-void ClearMultiDamage(void)
+__declspec(noinline) void ClearMultiDamage(void)
 {
 	gMultiDamage.pEntity = NULL;
 	gMultiDamage.amount	= 0;
@@ -104,7 +104,7 @@ void ClearMultiDamage(void)
 // GLOBALS USED:
 //		gMultiDamage
 
-void ApplyMultiDamage(entvars_t *pevInflictor, entvars_t *pevAttacker )
+__declspec(noinline) void ApplyMultiDamage(entvars_t *pevInflictor, entvars_t *pevAttacker )
 {
 	Vector		vecSpot1;//where blood comes from
 	Vector		vecDir;//direction blood should go
@@ -120,7 +120,7 @@ void ApplyMultiDamage(entvars_t *pevInflictor, entvars_t *pevAttacker )
 // GLOBALS USED:
 //		gMultiDamage
 
-void AddMultiDamage( entvars_t *pevInflictor, CBaseEntity *pEntity, float flDamage, int bitsDamageType)
+__declspec(noinline) void AddMultiDamage( entvars_t *pevInflictor, CBaseEntity *pEntity, float flDamage, int bitsDamageType)
 {
 	if ( !pEntity )
 		return;
