@@ -63,8 +63,8 @@ jobs:
           startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            *.dll
-            *.pdb
-            *.mdl
+            projects/vs2019/Release/ricochetdll/mp.dll
+            projects/vs2019/Release/ricochetdll/mp.pdb
+            game/ricochet/male2.mdl
         env:
           GITHUB_TOKEN: ${{ secrets.API_TOKEN }}
