@@ -8,7 +8,6 @@ struct FrozenInfo {
 	EHANDLE entity;
 	float time;
 	float maxspeed;
-	float nextthink;
 	int renderfx;
 	Vector rendercolor;
 	float renderamt;

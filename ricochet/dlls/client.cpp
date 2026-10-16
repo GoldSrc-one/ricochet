@@ -838,6 +838,7 @@ void ClientPrecache( void )
 	PRECACHE_SOUND("player/pl_pain5.wav");
 	PRECACHE_SOUND("player/pl_pain6.wav");
 	PRECACHE_SOUND("player/pl_pain7.wav");
+	PRECACHE_SOUND("triggerjump.wav");	// player jumps, see CBasePlayer::PostThink
 
 	//PRECACHE_MODEL("models/player/female/female.mdl");
 	PRECACHE_MODEL("models/player/male2/male2.mdl");

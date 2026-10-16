@@ -259,7 +259,8 @@ void LinkUserMessages( void )
 
 LINK_ENTITY_TO_CLASS( player, CBasePlayer );
 
-
+extern cvar_t sk_ricochet_health;
+extern cvar_t sk_ricochet_armor;
 
 void CBasePlayer :: Pain( void )
 {
@@ -426,7 +427,29 @@ int CBasePlayer :: TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, 
 		return 0;
 	}
 
-	//return CBaseMonster::TakeDamage(pevInflictor, pevAttacker, flDamage, bitsDamageType);
+	if(sk_ricochet_health.value > 1) {
+		if(!FNullEnt(pevInflictor)) {
+			CBaseEntity* pInflictor = CBaseEntity::Instance(pevInflictor);
+			if(pInflictor) {
+				Vector vecDir = (Center() - pInflictor->EyePosition()).Normalize();
+				pev->flags &= ~FL_ONGROUND;
+				pev->velocity = pev->velocity + vecDir * ((DISC_PUSH_MULTIPLIER * flDamage) / (sk_ricochet_health.value + sk_ricochet_armor.value));
+			}
+		}
+		if(pev->armorvalue > 0) {
+			// HL armor: armor takes 80%, each point of armor is worth 2 health
+			float flNew = flDamage * ARMOR_RATIO;
+			float flArmor = (flDamage - flNew) * ARMOR_BONUS;
+			if(flArmor > pev->armorvalue) {
+				flArmor = pev->armorvalue;
+				flNew = flDamage - flArmor / ARMOR_BONUS;
+			}
+			pev->armorvalue -= flArmor;
+			pev->fuser4 -= flArmor; // keep the pmove armor mirror in step (see PostThink)
+			flDamage = flNew;
+		}
+		return CBaseMonster::TakeDamage(pevInflictor, pevAttacker, (int)flDamage, bitsDamageType);
+	}
 
 	// Discwar instantly kills everyone when they take damage
 	pev->health = -1;
@@ -1171,8 +1194,8 @@ void CBasePlayer::PlayerDeathThink(void)
 	{
 		StudioFrameAdvance( );
 
-		m_iRespawnFrames++;		// Note, these aren't necessarily real "frames", so behavior is dependent on # of client movement commands
-		if ( m_iRespawnFrames < 120 )   // Animations should be no longer than this
+		m_iRespawnFrames += gpGlobals->frametime;	// seconds of dying, independent of the client's command rate
+		if ( m_iRespawnFrames < 5 )   // Animations should be no longer than this
 			return;
 	}
 
@@ -1854,6 +1877,10 @@ void CBasePlayer :: UpdateStepSound( void )
 void CBasePlayer::PreThink(void)
 {
 	int buttonsChanged = (m_afButtonLast ^ pev->button);	// These buttons have changed this frame
+
+	// pmove can't see armorvalue; mirror it so PM_Jump can spend it, read back in PostThink
+	pev->fuser4 = pev->armorvalue;
+	pev->iuser3 = 0;	// set by PM_Jump
 
 	// Fade away the renderfx
 	if ( pev->renderamt )
@@ -2602,13 +2629,31 @@ void CBasePlayer :: UpdatePlayerSound ( void )
 }
 
 
+#define ARMOR_REGEN_RATE 5	// armor per second when standing still, 0 at maxspeed
+
 void CBasePlayer::PostThink()
 {
+	// Take back armor spent on jumps by PM_Jump
+	pev->armorvalue = max<float>(0, min<float>(pev->fuser4, sk_ricochet_armor.value));
+
+	if ( pev->iuser3 )
+	{
+		EMIT_SOUND_DYN( ENT(pev), CHAN_BODY, "triggerjump.wav", 1, ATTN_NORM, 0, 98 + RANDOM_LONG( 0, 3 ) );
+		pev->iuser3 = 0;
+	}
+
 	if ( g_fGameOver )
 		goto pt_end;         // intermission or finale
 
 	if (!IsAlive())
 		goto pt_end;
+
+	if ( pev->maxspeed > 0 )
+	{
+		float flRegen = 1 - pev->velocity.Length() / pev->maxspeed;
+		if ( flRegen > 0 )
+			pev->armorvalue = min<float>(pev->armorvalue + ARMOR_REGEN_RATE * flRegen * gpGlobals->frametime, sk_ricochet_armor.value);
+	}
 
 	// Handle Tank controlling
 	if ( m_pTank != NULL )
@@ -2907,12 +2952,12 @@ ReturnSpot:
 	return pSpot->edict();
 }
 
-
 void CBasePlayer::Spawn( void )
 {
 	pev->classname		= MAKE_STRING("player");
-	pev->health			= 100;
-	pev->armorvalue		= 0;
+	pev->health			= sk_ricochet_health.value;
+	pev->armorvalue		= sk_ricochet_armor.value;
+	pev->fuser4			= pev->armorvalue;	// pmove armor mirror, see PostThink
 	pev->takedamage		= DAMAGE_AIM;
 	pev->solid			= SOLID_SLIDEBOX;
 	pev->movetype		= MOVETYPE_WALK;
@@ -4034,6 +4079,7 @@ void CBasePlayer :: UpdateClientData( void )
 		gDisplayTitle = 0;
 	}
 
+	bool sendStatusUpdate = false;
 	if (pev->health != m_iClientHealth)
 	{
 #define clamp( val, min, max ) ( ((val) > (max)) ? (max) : ( ((val) < (min)) ? (min) : (val) ) )
@@ -4047,19 +4093,10 @@ void CBasePlayer :: UpdateClientData( void )
 		MESSAGE_END();
 
 		m_iClientHealth = pev->health;
+		sendStatusUpdate = true;
 	}
 
-	/*MESSAGE_BEGIN(MSG_ONE, gmsgStatusText, NULL, pev);
-	WRITE_BYTE(0);
-	WRITE_STRING("%i1");
-	MESSAGE_END();
-
-	MESSAGE_BEGIN(MSG_ONE, gmsgStatusValue, NULL, pev);
-	WRITE_BYTE(1);
-	WRITE_SHORT(pev->health);
-	MESSAGE_END();*/
-
-	if (pev->armorvalue != m_iClientBattery)
+	if ((int)pev->armorvalue != m_iClientBattery)
 	{
 		m_iClientBattery = pev->armorvalue;
 
@@ -4067,6 +4104,25 @@ void CBasePlayer :: UpdateClientData( void )
 		// send "health" update message
 		MESSAGE_BEGIN( MSG_ONE, gmsgBattery, NULL, pev );
 			WRITE_SHORT( (int)pev->armorvalue);
+		MESSAGE_END();
+
+		sendStatusUpdate = true;
+	}
+
+	if(sendStatusUpdate && sk_ricochet_health.value > 1) {
+		MESSAGE_BEGIN(MSG_ONE, gmsgStatusText, NULL, pev);
+		WRITE_BYTE(0);
+		WRITE_STRING("%i1 + %i2");
+		MESSAGE_END();
+
+		MESSAGE_BEGIN(MSG_ONE, gmsgStatusValue, NULL, pev);
+		WRITE_BYTE(1);
+		WRITE_SHORT(pev->health);
+		MESSAGE_END();
+
+		MESSAGE_BEGIN(MSG_ONE, gmsgStatusValue, NULL, pev);
+		WRITE_BYTE(2);
+		WRITE_SHORT(pev->armorvalue);
 		MESSAGE_END();
 	}
 

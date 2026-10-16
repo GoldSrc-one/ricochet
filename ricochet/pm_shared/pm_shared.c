@@ -116,6 +116,7 @@ typedef struct hull_s
 #define PLAYER_FALL_PUNCH_THRESHHOLD (float)350 // won't punch player's screen/make scrape noise unless player falling at least this fast.
 
 #define PLAYER_LONGJUMP_SPEED 350 // how fast we longjump
+#define JUMP_ARMOR_COST 10 // armor spent per longjump / air jump
 
 #define PLAYER_DUCKING_MULTIPLIER 0.333
 
@@ -1999,9 +2000,6 @@ void PM_Duck( void )
 		pmove->oldbuttons &= ~IN_DUCK;
 	}
 
-	// Discwar: Prevent ducking
-	return;
-
 	if ( pmove->dead )
 		return;
 
@@ -2484,9 +2482,6 @@ void PM_Jump (void)
 
 	qboolean cansuperjump = false;
 
-	// Discwar: Prevent jumping
-	return;
-
 	if (pmove->dead)
 	{
 		pmove->oldbuttons |= IN_JUMP ;	// don't jump again until released
@@ -2550,30 +2545,28 @@ void PM_Jump (void)
 		return;
 	}
 
-	// No more effect
+	// Ricochet: air jump while falling, paid with armor (fuser4 mirrors armorvalue)
  	if ( pmove->onground == -1 )
 	{
-		// Flag that we jumped.
-		// HACK HACK HACK
-		// Remove this when the game .dll no longer does physics code!!!!
-		pmove->oldbuttons |= IN_JUMP;	// don't jump again until released
-		return;		// in air, so no effect
+		if ( ( pmove->oldbuttons & IN_JUMP ) || pmove->velocity[2] > 0 || pmove->fuser4 <= JUMP_ARMOR_COST )
+		{
+			// Flag that we jumped.
+			// HACK HACK HACK
+			// Remove this when the game .dll no longer does physics code!!!!
+			pmove->oldbuttons |= IN_JUMP;	// don't jump again until released
+			return;		// in air, so no effect
+		}
+		pmove->fuser4 -= JUMP_ARMOR_COST;
 	}
-
-	if ( pmove->oldbuttons & IN_JUMP )
+	else if ( pmove->oldbuttons & IN_JUMP )
 		return;		// don't pogo stick
 
 	// In the air now.
     pmove->onground = -1;
 
-	if ( tfc )
-	{
-		pmove->PM_PlaySound( CHAN_BODY, "player/plyrjmp8.wav", 0.5, ATTN_NORM, 0, PITCH_NORM );
-	}
-	else
-	{
-		PM_PlayStepSound( PM_MapTextureTypeStepType( pmove->chtexturetype ), 1.0 );
-	}
+	// Ricochet: flag the jump, the game dll plays triggerjump.wav in PostThink
+	// (PM_PlaySound skips the jumper, and vanilla clients don't predict these jumps)
+	pmove->iuser3 = 1;
 
 	// See if user can super long jump?
 	cansuperjump = atoi( pmove->PM_Info_ValueForKey( pmove->physinfo, "slj" ) ) == 1 ? true : false;
@@ -2587,8 +2580,10 @@ void PM_Jump (void)
 		if ( cansuperjump &&
 			( pmove->cmd.buttons & IN_DUCK ) &&
 			( pmove->flDuckTime > 0 ) &&
-			Length( pmove->velocity ) > 50 )
+			Length( pmove->velocity ) > 50 &&
+			pmove->fuser4 > JUMP_ARMOR_COST )
 		{
+			pmove->fuser4 -= JUMP_ARMOR_COST;
 			pmove->punchangle[0] = -5;
 
 			for (i =0; i < 2; i++)

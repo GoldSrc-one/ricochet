@@ -34,8 +34,8 @@
 float g_iaDiscColors[33][3] =
 {
 	{ 255, 255, 255, },
-	{ 250, 0, 0 },
 	{ 0, 0, 250 },
+	{ 250, 0, 0 },
 	{ 0, 250, 0 },
 	{ 128, 128, 0 },
 	{ 128, 0, 128 },
@@ -95,7 +95,7 @@ void CDisc::Spawn( void )
 
 	pev->classname = MAKE_STRING("disc");
 	pev->movetype = MOVETYPE_BOUNCEMISSILE;
-	pev->solid = SOLID_SLIDEBOX;
+	pev->solid = SOLID_TRIGGER;
 
 	// Setup model
 	if ( m_iPowerupFlags & POW_HARD )
@@ -113,6 +113,8 @@ void CDisc::Spawn( void )
 	m_fDontTouchEnemies = 0;
 	m_bRemoveSelf = false;
 	m_bTeleported = false;
+	m_vecLastOrigin = pev->origin;
+	m_flNextLogicThink = 0;
 	m_pLockTarget = NULL;
 
 	UTIL_MakeVectors( pev->angles );
@@ -175,6 +177,7 @@ void CDisc::Precache( void )
 	PRECACHE_SOUND("weapons/xbow_hit2.wav");
 	PRECACHE_SOUND("weapons/rocket1.wav");
 	PRECACHE_SOUND("dischit.wav");
+	PRECACHE_MODEL("sprites/discreturn.spr");
 	m_iTrail = PRECACHE_MODEL("sprites/smoke.spr");
 	m_iSpriteTexture = PRECACHE_MODEL( "sprites/lgtning.spr" );
 }
@@ -193,29 +196,39 @@ void CDisc::ReturnToThrower( void )
 	if (m_bDecapitate)
 	{
 		STOP_SOUND( edict(), CHAN_VOICE, "weapons/rocket1.wav" );
-		if ( !m_bRemoveSelf )
+		if ( !m_bRemoveSelf && m_hOwner )
 			((CBasePlayer*)(CBaseEntity*)m_hOwner)->GiveAmmo( MAX_DISCS, "disc", MAX_DISCS );
 	}
 	else
 	{
-		if ( !m_bRemoveSelf )
+		if ( !m_bRemoveSelf && m_hOwner )
 			((CBasePlayer*)(CBaseEntity*)m_hOwner)->GiveAmmo( 1, "disc", MAX_DISCS );
 	}
 
 	UTIL_Remove( this );
 }
 
+static bool IsFrozen( CBaseEntity *pEntity, bool isRicochetPlayer )
+{
+	if ( isRicochetPlayer )
+		return ((CBasePlayer*)pEntity)->m_iFrozen != FALSE;
+	for ( int i = 0; i < g_numFrozen; i++ )
+		if ( g_frozen[i].time && (CBaseEntity*)g_frozen[i].entity == pEntity )
+			return true;
+	return false;
+}
+
 void CDisc::DiscTouch ( CBaseEntity *pOther )
 {
 	// Push what can be pushed
-	if (pOther->pev->movetype == MOVETYPE_WALK ||
+	if (!FClassnameIs(pOther->pev, "disc") && (pOther->pev->movetype == MOVETYPE_WALK ||
 		pOther->pev->movetype == MOVETYPE_STEP ||
 		pOther->pev->movetype == MOVETYPE_FLY ||
 		pOther->pev->movetype == MOVETYPE_TOSS ||
 		pOther->pev->movetype == MOVETYPE_FLYMISSILE ||
 		pOther->pev->movetype == MOVETYPE_BOUNCE ||
 		pOther->pev->movetype == MOVETYPE_BOUNCEMISSILE ||
-		pOther->pev->movetype == MOVETYPE_PUSHSTEP)
+		pOther->pev->movetype == MOVETYPE_PUSHSTEP))
 	{
 		if ( ((CBaseEntity*)m_hOwner) == pOther )
 		{
@@ -243,7 +256,7 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 				// Do freeze seperately so you can freeze and shatter a person with a single shot
 
 				//TODO: make freezing of non ricochet players possible too!
-				if (m_iPowerupFlags & POW_FREEZE && ((CBasePlayer*)pOther)->m_iFrozen == FALSE )
+				if (m_iPowerupFlags & POW_FREEZE && !IsFrozen( pOther, otherIsRicochetPlayer ) )
 				{
 					// Freeze the player and make them glow blue
 					EMIT_SOUND_DYN( pOther->edict(), CHAN_WEAPON, "weapons/electro5.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3));
@@ -261,7 +274,6 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 							pFrozen->time = gpGlobals->time + FREEZE_TIME;
 
 							pFrozen->maxspeed = pOther->pev->maxspeed;
-							pFrozen->nextthink = pOther->pev->nextthink;
 							pFrozen->renderfx = pOther->pev->renderfx;
 							pFrozen->rendercolor = pOther->pev->rendercolor;
 							pFrozen->renderamt = pOther->pev->renderamt;
@@ -274,7 +286,10 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 							}
 							pOther->pev->velocity.x = 0;
 							pOther->pev->velocity.y = 0;
-							pOther->pev->nextthink = gpGlobals->time + FREEZE_TIME + 0.1;
+
+							float flUnfreeze = gpGlobals->time + FREEZE_TIME + 0.1;
+							if(!pOther->IsPlayer() && pOther->pev->nextthink > 0 && pOther->pev->nextthink < flUnfreeze)
+								pOther->pev->nextthink = flUnfreeze;
 
 							pOther->pev->renderfx = kRenderFxGlowShell;
 							pOther->pev->rendercolor.z = 200;
@@ -354,10 +369,10 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 		}
 	}
 	// Hit a disc?
-	else if ( pOther->pev->iuser4 ) 
+	else if ( FClassnameIs( pOther->pev, "disc" ) )
 	{
-		// Enemy Discs destroy each other
-		if ( pOther->pev->iuser4 != pev->iuser4 || !g_pGameRules->IsTeamplay())
+		// Enemy Discs destroy each other (in deathmatch everyone shares a team, so compare owners)
+		if ( g_pGameRules->IsTeamplay() ? pOther->pev->team != pev->team : (CBaseEntity*)((CDisc*)pOther)->m_hOwner != (CBaseEntity*)m_hOwner )
 		{
 			// Play a warp sound and sprite
 			CSprite *pSprite = CSprite::SpriteCreate( "sprites/discreturn.spr", pev->origin, TRUE );
@@ -377,6 +392,13 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 	}
 	else
 	{
+		// Flew through the sky brush into the void, give it back
+		if ( UTIL_PointContents( pev->origin ) == CONTENTS_SKY )
+		{
+			ReturnToThrower();
+			return;
+		}
+
 		m_iBounces++;
 
 		switch ( RANDOM_LONG( 0, 1 ) )
@@ -391,6 +413,34 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 
 void CDisc::DiscThink()
 {
+	// Trigger discs only touch things that move into them, so sweep for idle monsters every frame
+	TraceResult trSweep;
+	UTIL_TraceLine( m_vecLastOrigin, pev->origin, dont_ignore_monsters, edict(), &trSweep );
+	m_vecLastOrigin = pev->origin;
+	CBaseEntity *pHit = CBaseEntity::Instance( trSweep.pHit );
+	if ( pHit && !pHit->IsPlayer() && pHit->MyMonsterPointer() )
+		DiscTouch( pHit );
+
+	if ( m_flNextLogicThink > gpGlobals->time )
+	{
+		pev->nextthink = gpGlobals->time + 0.01;
+		return;
+	}
+	m_flNextLogicThink = gpGlobals->time + 0.1;
+
+	// Left player space (clip/sky is solid in hull3) and flying into the sky, give it back now
+	TraceResult tr;
+	UTIL_TraceHull( pev->origin, pev->origin, ignore_monsters, head_hull, edict(), &tr );
+	if ( tr.fStartSolid )
+	{
+		UTIL_TraceLine( pev->origin, pev->origin + pev->velocity.Normalize() * 16384, ignore_monsters, edict(), &tr );
+		if ( UTIL_PointContents( tr.vecEndPos ) == CONTENTS_SKY )
+		{
+			ReturnToThrower();
+			return;
+		}
+	}
+
 	// Make Freeze discs home towards any player ahead of them
 	if ( (m_iPowerupFlags & POW_FREEZE) && (m_iBounces == 0) )
 	{
@@ -478,7 +528,7 @@ void CDisc::DiscThink()
 	if ( pev->velocity == g_vecZero )
 		ReturnToThrower();
 
-	pev->nextthink = gpGlobals->time + 0.1;
+	pev->nextthink = gpGlobals->time + 0.01;
 }
 
 CDisc *CDisc::CreateDisc( Vector vecOrigin, Vector vecAngles, CBaseEntity *pOwner, CDiscWeapon *pLauncher, bool bDecapitator, int iPowerupFlags )
