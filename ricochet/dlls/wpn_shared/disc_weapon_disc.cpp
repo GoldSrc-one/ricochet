@@ -113,8 +113,6 @@ void CDisc::Spawn( void )
 	m_fDontTouchEnemies = 0;
 	m_bRemoveSelf = false;
 	m_bTeleported = false;
-	m_vecLastOrigin = pev->origin;
-	m_flNextLogicThink = 0;
 	m_pLockTarget = NULL;
 
 	UTIL_MakeVectors( pev->angles );
@@ -413,21 +411,6 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 
 void CDisc::DiscThink()
 {
-	// Trigger discs only touch things that move into them, so sweep for idle monsters every frame
-	TraceResult trSweep;
-	UTIL_TraceLine( m_vecLastOrigin, pev->origin, dont_ignore_monsters, edict(), &trSweep );
-	m_vecLastOrigin = pev->origin;
-	CBaseEntity *pHit = CBaseEntity::Instance( trSweep.pHit );
-	if ( pHit && !pHit->IsPlayer() && pHit->MyMonsterPointer() )
-		DiscTouch( pHit );
-
-	if ( m_flNextLogicThink > gpGlobals->time )
-	{
-		pev->nextthink = gpGlobals->time + 0.01;
-		return;
-	}
-	m_flNextLogicThink = gpGlobals->time + 0.1;
-
 	// Left player space (clip/sky is solid in hull3) and flying into the sky, give it back now
 	TraceResult tr;
 	UTIL_TraceHull( pev->origin, pev->origin, ignore_monsters, head_hull, edict(), &tr );
@@ -528,7 +511,7 @@ void CDisc::DiscThink()
 	if ( pev->velocity == g_vecZero )
 		ReturnToThrower();
 
-	pev->nextthink = gpGlobals->time + 0.01;
+	pev->nextthink = gpGlobals->time + 0.1;
 }
 
 CDisc *CDisc::CreateDisc( Vector vecOrigin, Vector vecAngles, CBaseEntity *pOwner, CDiscWeapon *pLauncher, bool bDecapitator, int iPowerupFlags )
