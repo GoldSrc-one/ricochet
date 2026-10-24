@@ -2548,7 +2548,7 @@ void PM_Jump (void)
 	// Ricochet: air jump while falling, paid with armor (fuser4 mirrors armorvalue)
  	if ( pmove->onground == -1 )
 	{
-		if ( ( pmove->oldbuttons & IN_JUMP ) || pmove->velocity[2] > 0 || pmove->fuser4 <= JUMP_ARMOR_COST )
+		if ( ( pmove->oldbuttons & IN_JUMP ) || pmove->velocity[2] > 0 || pmove->fuser4 < JUMP_ARMOR_COST )
 		{
 			// Flag that we jumped.
 			// HACK HACK HACK
@@ -2581,7 +2581,7 @@ void PM_Jump (void)
 			( pmove->cmd.buttons & IN_DUCK ) &&
 			( pmove->flDuckTime > 0 ) &&
 			Length( pmove->velocity ) > 50 &&
-			pmove->fuser4 > JUMP_ARMOR_COST )
+			pmove->fuser4 >= JUMP_ARMOR_COST )
 		{
 			pmove->fuser4 -= JUMP_ARMOR_COST;
 			pmove->punchangle[0] = -5;
