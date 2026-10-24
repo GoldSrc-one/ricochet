@@ -588,6 +588,25 @@ void CBasePlayer::Killed( entvars_t *pevAttacker, int iGib )
 	MESSAGE_END();
 
 
+	// Tell the arena that this player's died
+	if(m_pCurrentArena)
+		m_pCurrentArena->PlayerKilled(this);
+
+	// Tell all this player's discs to remove themselves after the 3rd bounce
+	edict_t* pFind = FIND_ENTITY_BY_CLASSNAME(NULL, "disc");
+	while(!FNullEnt(pFind)) {
+		CBaseEntity* pEnt = CBaseEntity::Instance(pFind);
+		CDisc* pDisc = (CDisc*)pEnt;
+
+		if(pDisc) {
+			if(((CBaseEntity*)pDisc->m_hOwner) == this)
+				pDisc->m_bRemoveSelf = true;
+		}
+
+		pFind = FIND_ENTITY_BY_CLASSNAME(pFind, "disc");
+	}
+
+
 	// UNDONE: Put this in, but add FFADE_PERMANENT and make fade time 8.8 instead of 4.12
 	// UTIL_ScreenFade( edict(), Vector(128,0,0), 6, 15, 255, FFADE_OUT | FFADE_MODULATE );
 
@@ -597,16 +616,8 @@ void CBasePlayer::Killed( entvars_t *pevAttacker, int iGib )
 		GibMonster();	// This clears pev->model
 		pev->effects |= EF_NODRAW;
 
-		// Tell the arena that this player's died
-		if (m_pCurrentArena)
-			m_pCurrentArena->PlayerKilled( this );
-
 		return;
 	}
-
-	// Tell the arena that this player's died
-	if (m_pCurrentArena)
-		m_pCurrentArena->PlayerKilled( this );
 
 	DeathSound();
 	
@@ -615,22 +626,6 @@ void CBasePlayer::Killed( entvars_t *pevAttacker, int iGib )
 
 	SetThink(&CBasePlayer::PlayerDeathThink);
 	pev->nextthink = gpGlobals->time + 0.1;
-
-	// Tell all this player's discs to remove themselves after the 3rd bounce
-	edict_t *pFind = FIND_ENTITY_BY_CLASSNAME( NULL, "disc" );
-	while ( !FNullEnt( pFind ) )
-	{
-		CBaseEntity *pEnt = CBaseEntity::Instance( pFind );
-		CDisc *pDisc = (CDisc *)pEnt;
-
-		if ( pDisc )
-		{
-			if ( ((CBaseEntity*)pDisc->m_hOwner) == this )
-				pDisc->m_bRemoveSelf = true;
-		}
-
-		pFind = FIND_ENTITY_BY_CLASSNAME( pFind, "disc" );
-	}	
 }
 
 // Hit by a decapitator disc
