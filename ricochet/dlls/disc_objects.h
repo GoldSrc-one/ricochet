@@ -51,6 +51,9 @@ public:
 
 	EHANDLE m_pLockTarget;
 
+	Vector	m_vecLastOrigin;		// Per-frame monster sweep start
+	float	m_flNextLogicThink;		// DiscThink runs every frame, the rest of the logic every 0.1s
+
 	Vector	m_vecActualVelocity;
 	Vector	m_vecSideVelocity;
 	Vector	m_vecOrg;

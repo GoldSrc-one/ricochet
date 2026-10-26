@@ -113,6 +113,8 @@ void CDisc::Spawn( void )
 	m_fDontTouchEnemies = 0;
 	m_bRemoveSelf = false;
 	m_bTeleported = false;
+	m_vecLastOrigin = pev->origin;
+	m_flNextLogicThink = 0;
 	m_pLockTarget = NULL;
 
 	UTIL_MakeVectors( pev->angles );
@@ -216,6 +218,9 @@ static bool IsFrozen( CBaseEntity *pEntity, bool isRicochetPlayer )
 	return false;
 }
 
+extern cvar_t sk_ricochet_normal_damage;
+extern cvar_t sk_ricochet_decap_damage;
+
 void CDisc::DiscTouch ( CBaseEntity *pOther )
 {
 	// Push what can be pushed
@@ -246,14 +251,15 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 			{
 				m_fDontTouchEnemies = gpGlobals->time + 0.1;
 
-				//bool otherIsPlayer = pOther->IsPlayer();
+				if(!pOther->pev->takedamage)
+					return;
+
 				bool otherIsRicochetPlayer = pOther->pev->modelindex == g_ulModelIndexPlayer && pOther->IsPlayer();
 				if(otherIsRicochetPlayer)
 					((CBasePlayer*)pOther)->m_LastHitGroup = HITGROUP_GENERIC;
 
 				// Do freeze seperately so you can freeze and shatter a person with a single shot
 
-				//TODO: make freezing of non ricochet players possible too!
 				if (m_iPowerupFlags & POW_FREEZE && !IsFrozen( pOther, otherIsRicochetPlayer ) )
 				{
 					// Freeze the player and make them glow blue
@@ -299,31 +305,23 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 							break;
 						}
 					}
-
-					// If it's not a decap, return now. If it's a decap, continue to shatter
-					if ( !m_bDecapitate )
-					{
-						return;
-					}
 				}
 
-				// Decap or push
-				if (m_bDecapitate && pOther->pev->takedamage)
-				{
-					// Decapitate!
-					if ( m_bTeleported && otherIsRicochetPlayer)
+				// Decapitate!
+				if(otherIsRicochetPlayer && m_bDecapitate) {
+					if(m_bTeleported)
 						((CBasePlayer*)pOther)->m_flLastDiscHitTeleport = gpGlobals->time;
-
-					if(otherIsRicochetPlayer) {
-						((CBasePlayer*)pOther)->Decapitate(((CBaseEntity*)m_hOwner)->pev);
-					}
-					else {
-						EMIT_SOUND(ENT(pev), CHAN_AUTO, "decap.wav", 1, ATTN_NORM);
-						pOther->TakeDamage(pev, ((CBaseEntity*)m_hOwner)->pev, 500, GIB_ALWAYS);
-					}
+					((CBasePlayer*)pOther)->Decapitate(((CBaseEntity*)m_hOwner)->pev);
 				}
-				else 
-				{
+				else {
+					if(m_bDecapitate)
+						EMIT_SOUND(ENT(pev), CHAN_AUTO, "decap.wav", 1, ATTN_NORM);
+
+					pOther->TakeDamage(pev, ((CBaseEntity*)m_hOwner)->pev, m_bDecapitate ? sk_ricochet_decap_damage.value : sk_ricochet_normal_damage.value, m_bDecapitate ? (DMG_SLASH | DMG_ALWAYSGIB) : DMG_SLASH);
+				}
+				
+				//push if still alive
+				if(pOther->IsAlive()) {
 					// Play thwack sound
 					switch( RANDOM_LONG(0,2) )
 					{
@@ -411,6 +409,21 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 
 void CDisc::DiscThink()
 {
+	// Trigger discs only touch things that move into them, so sweep for idle monsters every frame
+	TraceResult trSweep;
+	UTIL_TraceLine( m_vecLastOrigin, pev->origin, dont_ignore_monsters, edict(), &trSweep );
+	m_vecLastOrigin = pev->origin;
+	CBaseEntity *pHit = CBaseEntity::Instance( trSweep.pHit );
+	if ( pHit && !pHit->IsPlayer() && pHit->MyMonsterPointer() )
+		DiscTouch( pHit );
+
+	if ( m_flNextLogicThink > gpGlobals->time )
+	{
+		pev->nextthink = gpGlobals->time + 0.01;
+		return;
+	}
+	m_flNextLogicThink = gpGlobals->time + 0.1;
+
 	// Left player space (clip/sky is solid in hull3) and flying into the sky, give it back now
 	TraceResult tr;
 	UTIL_TraceHull( pev->origin, pev->origin, ignore_monsters, head_hull, edict(), &tr );
@@ -511,7 +524,7 @@ void CDisc::DiscThink()
 	if ( pev->velocity == g_vecZero )
 		ReturnToThrower();
 
-	pev->nextthink = gpGlobals->time + 0.1;
+	pev->nextthink = gpGlobals->time + 0.01;
 }
 
 CDisc *CDisc::CreateDisc( Vector vecOrigin, Vector vecAngles, CBaseEntity *pOwner, CDiscWeapon *pLauncher, bool bDecapitator, int iPowerupFlags )

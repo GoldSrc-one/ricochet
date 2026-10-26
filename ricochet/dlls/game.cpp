@@ -453,6 +453,8 @@ cvar_t	sk_player_leg3	= { "sk_player_leg3","1" };
 
 cvar_t	sk_ricochet_health = {"sk_ricochet_health", "30"};
 cvar_t	sk_ricochet_armor = {"sk_ricochet_armor", "20"};
+cvar_t	sk_ricochet_normal_damage = {"sk_ricochet_normal_damage", "15"};
+cvar_t	sk_ricochet_decap_damage = {"sk_ricochet_decap_damage", "150"};
 
 // END Cvars for Skill Level settings
 
@@ -897,6 +899,8 @@ void GameDLLInit( void )
 
 	CVAR_REGISTER ( &sk_ricochet_health );
 	CVAR_REGISTER ( &sk_ricochet_armor );
+	CVAR_REGISTER ( &sk_ricochet_normal_damage );
+	CVAR_REGISTER ( &sk_ricochet_decap_damage );
 // END REGISTER CVARS FOR SKILL LEVEL STUFF
 
 	CVAR_REGISTER ( &sv_pushable_fixed_tick_fudge );
