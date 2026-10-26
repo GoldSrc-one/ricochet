@@ -2548,7 +2548,11 @@ void PM_Jump (void)
 	// Ricochet: air jump while falling, paid with armor (fuser4 mirrors armorvalue)
  	if ( pmove->onground == -1 )
 	{
-		if ( ( pmove->oldbuttons & IN_JUMP ) || pmove->velocity[2] > 0 || pmove->fuser4 < JUMP_ARMOR_COST )
+		if ( pmove->velocity[2] > 0 || pmove->fuser4 < JUMP_ARMOR_COST
+#ifdef DISABLE_AUTOBHOP
+			|| (pmove->oldbuttons & IN_JUMP)
+#endif
+			)
 		{
 			// Flag that we jumped.
 			// HACK HACK HACK
@@ -2558,8 +2562,10 @@ void PM_Jump (void)
 		}
 		pmove->fuser4 -= JUMP_ARMOR_COST;
 	}
+#ifdef DISABLE_AUTOBHOP
 	else if ( pmove->oldbuttons & IN_JUMP )
 		return;		// don't pogo stick
+#endif
 
 	// In the air now.
     pmove->onground = -1;
