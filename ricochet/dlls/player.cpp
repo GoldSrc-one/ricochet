@@ -2628,13 +2628,16 @@ void CBasePlayer :: UpdatePlayerSound ( void )
 
 void CBasePlayer::PostThink()
 {
-	// Take back armor spent on jumps by PM_Jump
-	pev->armorvalue = max<float>(0, min<float>(pev->fuser4, sk_ricochet_armor.value));
 
-	if ( pev->iuser3 )
+	// handle ricochet jump sound and armor spending
+	if (pev->iuser3)
 	{
 		EMIT_SOUND_DYN( ENT(pev), CHAN_BODY, "triggerjump.wav", 1, ATTN_NORM, 0, 98 + RANDOM_LONG( 0, 3 ) );
 		pev->iuser3 = 0;
+
+		// Take back armor spent on jumps by PM_Jump
+		if(pev->fuser4 < pev->armorvalue)
+			pev->armorvalue = max<float>(0, pev->fuser4);
 	}
 
 	if ( g_fGameOver )
@@ -2646,7 +2649,7 @@ void CBasePlayer::PostThink()
 	if ( pev->maxspeed > 0 )
 	{
 		float flRegen = 1 - pev->velocity.Length() / pev->maxspeed;
-		if ( flRegen > 0 )
+		if ( flRegen > 0 && pev->armorvalue < sk_ricochet_armor.value)
 			pev->armorvalue = min<float>(pev->armorvalue + ARMOR_REGEN_RATE * flRegen * gpGlobals->frametime, sk_ricochet_armor.value);
 	}
 
