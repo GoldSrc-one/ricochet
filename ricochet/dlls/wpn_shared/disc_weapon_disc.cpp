@@ -224,14 +224,7 @@ extern cvar_t sk_ricochet_decap_damage;
 void CDisc::DiscTouch ( CBaseEntity *pOther )
 {
 	// Push what can be pushed
-	if (!FClassnameIs(pOther->pev, "disc") && (pOther->pev->movetype == MOVETYPE_WALK ||
-		pOther->pev->movetype == MOVETYPE_STEP ||
-		pOther->pev->movetype == MOVETYPE_FLY ||
-		pOther->pev->movetype == MOVETYPE_TOSS ||
-		pOther->pev->movetype == MOVETYPE_FLYMISSILE ||
-		pOther->pev->movetype == MOVETYPE_BOUNCE ||
-		pOther->pev->movetype == MOVETYPE_BOUNCEMISSILE ||
-		pOther->pev->movetype == MOVETYPE_PUSHSTEP))
+	if (!FClassnameIs(pOther->pev, "disc") && pOther->pev->takedamage)
 	{
 		if ( ((CBaseEntity*)m_hOwner) == pOther )
 		{
@@ -250,9 +243,6 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 			if ( pev->team != pOther->pev->team || !g_pGameRules->IsTeamplay())
 			{
 				m_fDontTouchEnemies = gpGlobals->time + 0.1;
-
-				if(!pOther->pev->takedamage)
-					return;
 
 				bool otherIsRicochetPlayer = pOther->pev->modelindex == g_ulModelIndexPlayer && pOther->IsPlayer();
 				if(otherIsRicochetPlayer)
@@ -320,46 +310,51 @@ void CDisc::DiscTouch ( CBaseEntity *pOther )
 					pOther->TakeDamage(pev, ((CBaseEntity*)m_hOwner)->pev, m_bDecapitate ? sk_ricochet_decap_damage.value : sk_ricochet_normal_damage.value, m_bDecapitate ? (DMG_SLASH | DMG_ALWAYSGIB) : DMG_SLASH);
 				}
 				
-				//push if still alive
-				if(pOther->IsAlive()) {
-					// Play thwack sound
-					switch( RANDOM_LONG(0,2) )
-					{
-					case 0:
-						EMIT_SOUND_DYN( pOther->edict(), CHAN_ITEM, "weapons/cbar_hitbod1.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
-						break;
-					case 1:
-						EMIT_SOUND_DYN( pOther->edict(), CHAN_ITEM, "weapons/cbar_hitbod2.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
-						break;
-					case 2:
-						EMIT_SOUND_DYN( pOther->edict(), CHAN_ITEM, "weapons/cbar_hitbod3.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
-						break;
-					}
+				//don't push if already dead
+				if(!pOther->IsAlive())
+					return;
 
-					// Push the player
-					Vector vecDir = pev->velocity.Normalize();
-					pOther->pev->flags &= ~FL_ONGROUND;
+				//push only players and monsters
+				if(!pOther->IsPlayer() && !(strncmp(STRING(pOther->pev->classname), "monster_", 8) == 0))
+					return;
 
-					if(otherIsRicochetPlayer)
-						((CBasePlayer*)pOther)->m_vecHitVelocity = vecDir * DISC_PUSH_MULTIPLIER;
-					else
-						pOther->pev->velocity = pOther->pev->velocity + vecDir * DISC_PUSH_MULTIPLIER;
+				// Play thwack sound
+				switch( RANDOM_LONG(0,2) )
+				{
+				case 0:
+					EMIT_SOUND_DYN( pOther->edict(), CHAN_ITEM, "weapons/cbar_hitbod1.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
+					break;
+				case 1:
+					EMIT_SOUND_DYN( pOther->edict(), CHAN_ITEM, "weapons/cbar_hitbod2.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
+					break;
+				case 2:
+					EMIT_SOUND_DYN( pOther->edict(), CHAN_ITEM, "weapons/cbar_hitbod3.wav", 1.0, ATTN_NORM, 0, 98 + RANDOM_LONG(0,3)); 
+					break;
+				}
 
-					// Shield flash only if the player isnt frozen
-					if (otherIsRicochetPlayer && ((CBasePlayer*)pOther)->m_iFrozen == false )
-					{
-						pOther->pev->renderfx = kRenderFxGlowShell;
-						pOther->pev->rendercolor.x = 255;
-						pOther->pev->renderamt = 150;
-					}
+				// Push the player
+				Vector vecDir = pev->velocity.Normalize();
+				pOther->pev->flags &= ~FL_ONGROUND;
 
-					if(otherIsRicochetPlayer) {
-						((CBasePlayer*)pOther)->m_hLastPlayerToHitMe = m_hOwner;
-						((CBasePlayer*)pOther)->m_flLastDiscHit = gpGlobals->time;
-						((CBasePlayer*)pOther)->m_iLastDiscBounces = m_iBounces;
-						if(m_bTeleported)
-							((CBasePlayer*)pOther)->m_flLastDiscHitTeleport = gpGlobals->time;
-					}
+				if(otherIsRicochetPlayer)
+					((CBasePlayer*)pOther)->m_vecHitVelocity = vecDir * DISC_PUSH_MULTIPLIER;
+				else
+					pOther->pev->velocity = pOther->pev->velocity + vecDir * DISC_PUSH_MULTIPLIER;
+
+				// Shield flash only if the player isnt frozen
+				if (otherIsRicochetPlayer && ((CBasePlayer*)pOther)->m_iFrozen == false )
+				{
+					pOther->pev->renderfx = kRenderFxGlowShell;
+					pOther->pev->rendercolor.x = 255;
+					pOther->pev->renderamt = 150;
+				}
+
+				if(otherIsRicochetPlayer) {
+					((CBasePlayer*)pOther)->m_hLastPlayerToHitMe = m_hOwner;
+					((CBasePlayer*)pOther)->m_flLastDiscHit = gpGlobals->time;
+					((CBasePlayer*)pOther)->m_iLastDiscBounces = m_iBounces;
+					if(m_bTeleported)
+						((CBasePlayer*)pOther)->m_flLastDiscHitTeleport = gpGlobals->time;
 				}
 			}
 		}
@@ -414,7 +409,7 @@ void CDisc::DiscThink()
 	UTIL_TraceLine( m_vecLastOrigin, pev->origin, dont_ignore_monsters, edict(), &trSweep );
 	m_vecLastOrigin = pev->origin;
 	CBaseEntity *pHit = CBaseEntity::Instance( trSweep.pHit );
-	if ( pHit && !pHit->IsPlayer() && pHit->MyMonsterPointer() )
+	if ( pHit && !pHit->IsPlayer() )
 		DiscTouch( pHit );
 
 	if ( m_flNextLogicThink > gpGlobals->time )
