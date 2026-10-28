@@ -408,9 +408,11 @@ void CDisc::DiscThink()
 	TraceResult trSweep;
 	UTIL_TraceLine( m_vecLastOrigin, pev->origin, dont_ignore_monsters, edict(), &trSweep );
 	m_vecLastOrigin = pev->origin;
-	CBaseEntity *pHit = CBaseEntity::Instance( trSweep.pHit );
-	if ( pHit && !pHit->IsPlayer() )
-		DiscTouch( pHit );
+	if(trSweep.fStartSolid || trSweep.flFraction < 1.f) {
+		CBaseEntity* pHit = CBaseEntity::Instance(trSweep.pHit);
+		if(pHit && !pHit->IsPlayer())
+			DiscTouch(pHit);
+	}
 
 	if ( m_flNextLogicThink > gpGlobals->time )
 	{
