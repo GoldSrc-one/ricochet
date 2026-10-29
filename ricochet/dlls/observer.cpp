@@ -189,6 +189,9 @@ void CBasePlayer::Observer_FindNextPlayer( bool bReverse )
 
 void CBasePlayer::ObserverInput_ChangeMode()
 {
+	if ( !IsObserver() )
+		return;
+
 	if ( pev->iuser1 == OBS_ROAMING )
 		Observer_SetMode( OBS_CHASE_FREE );
 	else if ( pev->iuser1 == OBS_CHASE_FREE )
@@ -199,13 +202,13 @@ void CBasePlayer::ObserverInput_ChangeMode()
 
 void CBasePlayer::ObserverInput_NextPlayer()
 {
-	if ( pev->iuser1 != OBS_ROAMING )
+	if ( IsObserver() && pev->iuser1 != OBS_ROAMING )
 		 Observer_FindNextPlayer( false );
 }
 
 void CBasePlayer::ObserverInput_PrevPlayer()
 {
-	if ( pev->iuser1 != OBS_ROAMING )
+	if ( IsObserver() && pev->iuser1 != OBS_ROAMING )
 		 Observer_FindNextPlayer( true );
 }
 
